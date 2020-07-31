@@ -1,0 +1,49 @@
+
+Public Function Wave_Sum_vbt() As Long
+
+
+    Dim keyStr As String
+    Dim i As Long
+    
+    Dim oneWave As New DSPWave
+    Dim allWave As New DSPWave
+    
+    Dim position As Long
+    
+    position = 0
+    
+    TheExec.Datalog.WriteComment ""
+
+    
+    For i = 0 To waveObj.count - 1
+    
+        keyStr = waveObj.Keys()(i)
+        oneWave = waveObj.Item(keyStr)
+        
+        For Each Site In TheExec.Sites
+            oneWave.FileExport ".\Wave\Wave_" & Replace(keyStr, ":", "_") & "_s" & Site & ".txt"
+        Next Site
+        
+        position = position + oneWave.SampleSize
+        
+        
+        TheExec.Datalog.WriteComment "Wave of " & keyStr & vbTab & vbTab & "From " & position - oneWave.SampleSize & vbTab & vbTab & "To " & position - 1
+        
+        
+        For Each Site In TheExec.Sites
+            If i = 0 Then
+                allWave = oneWave.Copy
+            Else
+                allWave = allWave.Concatenate(oneWave)
+            End If
+        Next Site
+    Next i
+    
+    
+    For Each Site In TheExec.Sites
+        allWave.Plot "All Wave      Site: " & Site
+        allWave.FileExport ".\Wave\All_Wave_s" & Site & ".txt"
+    Next Site
+
+End Function
+
