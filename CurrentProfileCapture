@@ -1,0 +1,50 @@
+Public Function DPSCurrentCurve_Capture_vbt(in_PinName As PinList, _
+                                             in_DpsPinType As String, _
+                                             in_OutputFileFlag As Boolean, _
+                                             in_SigName As String)
+
+    On Error GoTo errHandler
+    
+    Dim i_CurrentWave_DSP As New DSPWave
+    Dim Site As Variant
+    Dim c_TestName As String
+    
+    c_TestName = TheExec.DataManager.InstanceName
+    
+    
+    
+    
+    If Left(in_DpsPinType, 4) = "DCVI" Then   'UltraVI80
+    
+        TheHdw.DCVI.Pins(in_PinName).Capture.Signals.Stop
+        Do While TheHdw.DCVI.Pins(in_PinName).Capture.IsCaptureDone = False
+        Loop
+        i_CurrentWave_DSP = TheHdw.DCVI.Pins(in_PinName).Capture.Signals(in_SigName).DSPWave
+        
+    ElseIf Left(in_DpsPinType, 4) = "DCVS" Then
+    
+        TheHdw.DCVS.Pins(in_PinName).Capture.Signals.Stop
+        Do While TheHdw.DCVS.Pins(in_PinName).Capture.IsRunning = True
+        Loop
+        i_CurrentWave_DSP = TheHdw.DCVS.Pins(in_PinName).Capture.Signals(in_SigName).DSPWave
+        
+    Else
+        TheExec.AddOutput "Unknown pin type for " & in_PinName
+        GoTo errHandler
+    End If
+    
+    waveObj.Add "TS: " & TheExec.DataManager.InstanceName & "   Signal: " & in_SigName, i_CurrentWave_DSP
+    
+'    For Each Site In TheExec.Sites
+'        i_CurrentWave_DSP(Site).Plot in_PinName & vbTab & "      DSP_Current_Wave      CapSig: " & in_SigName & "      Site " & Site
+'
+'        If in_OutputFileFlag Then
+'            i_CurrentWave_DSP.FileExport "./DCurrentCurve_site" & Site & "__" & in_PinName & "__" & in_SigName & "__" & Format(Now, "yyyymmdd") & "_" & Hour(Now) & "H" & Minute(Now) & "M.txt", File_txt
+'        End If
+'    Next Site
+                
+Exit Function
+    
+errHandler:
+    If AbortTest Then Exit Function Else Resume Next
+End Function
