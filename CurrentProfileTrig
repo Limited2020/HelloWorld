@@ -1,0 +1,51 @@
+
+
+Public Function DPSCurrentCurve_Trigger_vbt(in_PinName As PinList, _
+                                                 in_DpsPinType As String, _
+                                                 in_MeasCurrRange As Double, _
+                                                 in_SampleRate As Long, _
+                                                 in_SampleSize As Long, _
+                                                 sigName As String)
+
+    On Error GoTo errHandler
+    
+    If Left(in_DpsPinType, 4) = "DCVI" Then   'UltraVI80
+        TheHdw.DCVI.Pins(in_PinName).Capture.Signals.Add (sigName)
+        TheHdw.DCVI.Pins(in_PinName).Capture.Signals.DefaultSignal = sigName
+        
+        With TheHdw.DCVI.Pins(in_PinName).Capture.Signals.Item(sigName)
+            .Mode = tlDCVIMeterCurrent
+            .Range = in_MeasCurrRange
+            .SampleRate = in_SampleRate
+            .SampleSize = in_SampleSize
+            .LoadSettings
+        End With
+        
+        TheHdw.DCVI.Pins(in_PinName).Capture.Signals.Item(sigName).Trigger
+    
+    ElseIf Left(in_DpsPinType, 4) = "DCVS" Then
+        TheHdw.DCVS.Pins(in_PinName).Capture.Signals.Add (sigName)
+        TheHdw.DCVS.Pins(in_PinName).Capture.Signals.DefaultSignal = sigName
+        
+        With TheHdw.DCVS.Pins(in_PinName).Capture.Signals.Item(sigName)
+            .Mode = tlDCVSMeterCurrent
+            .Range = in_MeasCurrRange
+            .SampleRate = in_SampleRate
+            .SampleSize = in_SampleSize
+            .LoadSettings
+        End With
+        
+        TheHdw.DCVS.Pins(in_PinName).Capture.Signals.Item(sigName).Trigger
+        
+    
+    Else
+        TheExec.AddOutput "Unknown pin type for " & in_PinName
+        GoTo errHandler
+    End If
+
+                    
+    Exit Function
+    
+errHandler:
+    If AbortTest Then Exit Function Else Resume Next
+End Function
