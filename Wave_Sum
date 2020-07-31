@@ -1,4 +1,11 @@
 
+'Put in OnprogramStart
+'Set waveObj = CreateObject("Scripting.Dictionary")
+'Put where you need
+'Public waveObj As Object
+
+
+
 Public Function Wave_Sum_vbt() As Long
 
 
