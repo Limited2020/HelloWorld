@@ -1,0 +1,54 @@
+
+Page1
+
+1. 定义public变量
+Public waveObj As Object
+
+2. 在On Program Started中初始化
+Set waveObj = CreateObject("Scripting.Dictionary")
+
+3. 每个波形产生后，把波形加到waveObj中  WaveName必须唯一
+
+ waveObj.Add  waveName, DspWave
+
+Example:  waveObj.Add  InstanceName & SigName, CurrentWave_DSP
+
+
+Page2
+
+4. 依次取出波形，合并波形波形
+
+
+
+Public Function Wave_Sum_vbt() As Long
+
+    Dim keyStr As String
+    Dim i As Long
+    
+    Dim oneWave As New DspWave
+    Dim allWave As New DspWave
+    
+    For i = 0 To waveObj.Count - 1
+    
+        keyStr = waveObj.keys()(i)
+        oneWave = waveObj.Item(keyStr)
+    next
+
+
+    For Each site In TheExec.Sites
+                If i = 0 Then
+                    allWave = oneWave.Copy
+                Else
+                    allWave = allWave.Concatenate(oneWave)
+                End If
+            Next site
+        Next i
+
+
+        For Each site In TheExec.Sites
+            allWave.Plot "All Wave      Site: " & site
+        Next site
+
+End Function
+
+
