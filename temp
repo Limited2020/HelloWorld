@@ -391,3 +391,537 @@ errHandler:
     If AbortTest Then Exit Function Else Resume Next
 
 End Function
+
+
+
+Public Function PG_UpdateNoneAVSModuleFlag(ByRef inout_OtherModulePassFlag As SiteLong) As Long
+   
+   On Error GoTo errHandler
+''''This Function update the result in glb_PG_FlowResult_Dspwave to Current Module Flag
+    Dim PG_FlowResult_Samplesize As Long
+    Dim idx_Module As Long
+    Dim i As Long
+    Dim Site As Variant
+    Dim errmsg As String
+    
+        For Each Site In TheExec.Sites
+            glb_PG_FlowResult_Dspwave = glb_PG_FlowResult_Dspwave.Select(glb_Module_Count + 2, 1, -1)   ''remove the inital dummy element
+            PG_FlowResult_Samplesize = glb_PG_FlowResult_Dspwave.SampleSize
+            
+            'set FlowModuleFlag.iValue as the inital value of ModulePassFlag
+            For idx_Module = 0 To glb_Module_Count - 1
+                CurrentFlowModulePassFlag(idx_Module).iValue = FlowModuleFlag(idx_Module).iValue
+            Next idx_Module
+    
+            
+            For i = 0 To PG_FlowResult_Samplesize - 1 Step glb_Module_Count + 2
+                '''Update PG Result to Efuse FlowFlag_Module
+                For idx_Module = 0 To glb_Module_Count - 1
+                    If glb_PG_FlowResult_Dspwave.Element(i + idx_Module) = -1 Or glb_PG_FlowResult_Dspwave.Element(i + idx_Module) = 1 Then
+                        CurrentFlowModulePassFlag(idx_Module).iValue = CurrentFlowModulePassFlag(idx_Module).iValue And 1
+                    ElseIf glb_PG_FlowResult_Dspwave.Element(i + idx_Module) = 0 Then
+                        CurrentFlowModulePassFlag(idx_Module).iValue = CurrentFlowModulePassFlag(idx_Module).iValue And 0
+                    Else
+                        'Fool proof,in case of wrong dspwave element assign
+                        errmsg = "Error!!!The element in glb_PG_FlowResult_Dspwave can only be 0 or 1 or -1,not other numbers"
+                        GoTo errHandler
+                    End If
+                Next idx_Module
+                 '''Update other's Result to FlowFlag_other
+                inout_OtherModulePassFlag = inout_OtherModulePassFlag And glb_PG_FlowResult_Dspwave.Element(i + idx_Module)
+            Next i
+            
+            'Fool proof,inout_OtherModulePassFlag's value can only be 0 or 1,in case of wrong value assignment
+            If inout_OtherModulePassFlag <> 0 And inout_OtherModulePassFlag <> 1 Then
+                errmsg = "Error!!!The value of inout_OtherModulePassFlag can only be 0 or 1,not other numbers"
+                GoTo errHandler
+            End If
+            
+            ''Updating FlowModuleFlag when None AVS result processing done, it will be the inital value in AVS result Updating process
+            For idx_Module = 0 To glb_Module_Count - 1
+                FlowModuleFlag(idx_Module).iValue = CurrentFlowModulePassFlag(idx_Module).iValue
+            Next idx_Module
+            
+        Next Site
+
+
+    Exit Function
+errHandler:
+
+    TheExec.ErrorLogMessage ("PG_UpdateNoneAVSModuleFlag: " + errmsg)
+    If AbortTest Then Exit Function Else Resume Next
+
+End Function
+Public Function PG_UpdateAVSModuleFlag(ByRef inout_OtherModulePassFlag_LP As SiteLong, ByRef inout_OtherModulePassFlag_HP As SiteLong) As Long
+    
+    
+    On Error GoTo errHandler
+''''This Function update the result in glb_PG_FlowResult_AVS_Dspwave to Current Module Flag
+    Dim PG_FlowResult_AVS_Samplesize As Long
+    Dim idx_Module As Long
+    Dim i As Long
+    Dim errmsg As String
+    
+    Dim Site As Variant
+        For Each Site In TheExec.Sites
+            
+            glb_PG_FlowResult_AVS_Dspwave = glb_PG_FlowResult_AVS_Dspwave.Select((glb_Module_Count + 2) * 2, 1, -1)   ''remove the inital dummy element
+            PG_FlowResult_AVS_Samplesize = glb_PG_FlowResult_AVS_Dspwave.SampleSize
+            
+            'the FlowModuleFlag.iValue has been updated when calling PG_UpdateNoneAVSModuleFlag function, so they should be the inital value of LP and HP flag
+            For idx_Module = 0 To glb_Module_Count - 1
+                CurrentFlowModulePassFlag(idx_Module).iValue = FlowModuleFlag(idx_Module).iValue
+                CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).iValue = FlowModuleFlag(idx_Module).iValue
+            Next idx_Module
+            
+            For i = 0 To PG_FlowResult_AVS_Samplesize - 1 Step (glb_Module_Count + 2) * 2
+                For idx_Module = 0 To glb_Module_Count - 1
+                    
+                    '''Update AVS LP Result to Efuse FlowFlag_Module
+                    If glb_PG_FlowResult_AVS_Dspwave.Element(i + idx_Module) = -1 Or glb_PG_FlowResult_AVS_Dspwave.Element(i + idx_Module) = 1 Then
+                        CurrentFlowModulePassFlag(idx_Module).iValue = CurrentFlowModulePassFlag(idx_Module).iValue And 1
+                    ElseIf glb_PG_FlowResult_AVS_Dspwave.Element(i + idx_Module) = 0 Then
+                        CurrentFlowModulePassFlag(idx_Module).iValue = CurrentFlowModulePassFlag(idx_Module).iValue And 0
+                    Else
+                        'Fool proof,in case of wrong dspwave element assign
+                        errmsg = "Error!!!The element in glb_PG_FlowResult_AVS_Dspwave can only be 0 or 1 or -1,not other numbers"
+                        GoTo errHandler
+                    End If
+                    
+                    '''Update AVS HP Result to Efuse FlowFlag_Module
+                    If glb_PG_FlowResult_AVS_Dspwave.Element(i + idx_Module + glb_Module_Count + 2) = -1 Or glb_PG_FlowResult_AVS_Dspwave.Element(i + idx_Module + glb_Module_Count + 2) = 1 Then
+                        CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).iValue = CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).iValue And 1
+                    ElseIf glb_PG_FlowResult_AVS_Dspwave.Element(i + idx_Module + glb_Module_Count + 2) = 0 Then
+                        CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).iValue = CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).iValue And 0
+                    Else
+                        'Fool proof,in case of wrong dspwave element assign
+                        errmsg = "Error!!!The element in glb_PG_FlowResult_AVS_Dspwave can only be 0 or 1 or -1,not other numbers"
+                        GoTo errHandler
+                    End If
+                    
+                Next idx_Module
+                    '''Update other's Result to FlowFlag_other
+                inout_OtherModulePassFlag_LP = inout_OtherModulePassFlag_LP And glb_PG_FlowResult_AVS_Dspwave.Element(i + idx_Module)
+                inout_OtherModulePassFlag_HP = inout_OtherModulePassFlag_HP And glb_PG_FlowResult_AVS_Dspwave.Element(i + idx_Module + glb_Module_Count + 2)
+            Next i
+            
+            'Fool proof,inout_OtherModulePassFlag's value can only be 0 or 1,in case of wrong value assignment
+            If inout_OtherModulePassFlag_LP <> 0 And inout_OtherModulePassFlag_LP <> 1 And inout_OtherModulePassFlag_HP <> 0 And inout_OtherModulePassFlag_HP <> 1 Then
+                errmsg = "Error!!!The value of inout_OtherModulePassFlag can only be 0 or 1,not other numbers"
+                GoTo errHandler
+            End If
+            
+        Next Site
+
+    Exit Function
+errHandler:
+
+    TheExec.ErrorLogMessage ("PG_UpdateAVSModuleFlag: " + errmsg)
+    If AbortTest Then Exit Function Else Resume Next
+
+End Function
+
+Public Function PG_PostJudge(Optional FlowIsAVS As Boolean = False) As Long
+
+On Error GoTo errHandler
+
+    Dim i As Long
+    Dim idx_Module As Long
+    Dim Site As Variant
+    Dim errmsg As String
+    Dim JobName As String
+    JobName = TheExec.CurrentJob
+     
+    
+    Dim FlowModulePassFlagWriteIndex_lng As Long
+    Dim CurrentFlowModulePassFlagFromEfuse As Long
+    Dim ModuleRetestBecomeFail As Long
+    
+    
+    Dim LocalDSPS_Dspwave As New DSPWave
+    Dim LocalFFT_Dspwave As New DSPWave
+    Dim LocalSAMP_Dspwave As New DSPWave
+    Dim LocalDSPS_AVSLP_Dspwave As New DSPWave
+    Dim LocalFFT_AVSLP_Dspwave As New DSPWave
+    Dim LocalSAMP_AVSLP_Dspwave As New DSPWave
+    Dim LocalDSPS_AVSHP_Dspwave As New DSPWave
+    Dim LocalFFT_AVSHP_Dspwave As New DSPWave
+    Dim LocalSAMP_AVSHP_Dspwave As New DSPWave
+    
+    Dim OtherModulePassFlag As New SiteLong: OtherModulePassFlag = 1
+    Dim OtherModulePassFlag_LP As New SiteLong 'only used in AVS flow
+    Dim OtherModulePassFlag_HP As New SiteLong 'only used in AVS flow
+    
+    Dim DSP_ModuleFailCount_slng As New SiteLong
+    Dim FFT_ModuleFailCount_slng As New SiteLong
+    Dim SAMP_ModuleFailCount_slng As New SiteLong
+    Dim DSP_AVSLP_ModuleFailCount_slng As New SiteLong
+    Dim FFT_AVSLP_ModuleFailCount_slng As New SiteLong
+    Dim SAMP_AVSLP_ModuleFailCount_slng As New SiteLong
+    Dim DSP_AVSHP_ModuleFailCount_slng As New SiteLong
+    Dim FFT_AVSHP_ModuleFailCount_slng As New SiteLong
+    Dim SAMP_AVSHP_ModuleFailCount_slng As New SiteLong
+    
+    If FlowIsAVS = True Then    '''Means AVS Flow
+    
+    
+    
+        Call PG_UpdateNoneAVSModuleFlag(OtherModulePassFlag)
+        
+        '''in AVS flow,PG_UpdateNoneAVSModuleFlag must be called before PG_UpdateAVSModuleFlag,because the inital value of LP&HP Flag should based on None AVS PG result
+        
+        OtherModulePassFlag_LP = OtherModulePassFlag
+        OtherModulePassFlag_HP = OtherModulePassFlag
+        
+        Call PG_UpdateAVSModuleFlag(OtherModulePassFlag_LP, OtherModulePassFlag_HP)
+        
+        
+        
+        '''Datalog all module flag and update them to efuse PGM
+        For Each Site In TheExec.Sites
+            
+            CurrentFlowPGPassFlag.iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(CurrentFlowPGPassFlag.cItemName, 0, Site)
+            TheExec.Flow.TestLimit ResultVal:=CurrentFlowPGPassFlag.iValue, lowVal:=0, hiVal:=1, PinName:=CurrentFlowPGPassFlag.cItemName, ForceResults:=tlForceNone, TName:="CurrentFlowPGPassFlag"
+            
+            For idx_Module = 0 To glb_Module_Count * 2 - 1
+                CurrentFlowModulePassFlagFromEfuse = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(CurrentFlowModulePassFlag(idx_Module).cItemName, 0, Site)
+                TheExec.Flow.TestLimit ResultVal:=CurrentFlowModulePassFlagFromEfuse, lowVal:=0, hiVal:=1, PinName:=CurrentFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="CurrentFlowModulePassFlagFromEfuse"
+                If CurrentFlowModulePassFlagFromEfuse = 1 And CurrentFlowModulePassFlag(idx_Module).iValue = 0 Then
+                    ModuleRetestBecomeFail = 1
+                    TheExec.Sites(Site).BinNumber = 6
+                    TheExec.Sites(Site).SortNumber = 6996
+                    TheExec.Sites(Site).Result = tlResultFail
+                Else
+                    ModuleRetestBecomeFail = 0
+                End If
+                TheExec.Flow.TestLimit ResultVal:=ModuleRetestBecomeFail, lowVal:=0, hiVal:=0, PinName:=CurrentFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="ModuleRetestBecomeFail"
+            Next idx_Module
+                        
+            For idx_Module = 0 To glb_Module_Count - 1
+                TheExec.Flow.TestLimit ResultVal:=CurrentFlowModulePassFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=CurrentFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="FlowModulePassFlag"
+                TheExec.Flow.TestLimit ResultVal:=CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).iValue, lowVal:=0, hiVal:=1, PinName:=CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).cItemName, ForceResults:=tlForceNone, TName:="FlowModulePassFlag"
+                Call HiEfuse.MULT_EFUSE_ITEM_UPDATE(CurrentFlowModulePassFlag(idx_Module).cItemName, 0, CLng(Site), CDbl(CurrentFlowModulePassFlag(idx_Module).iValue), 0, False)
+                Call HiEfuse.MULT_EFUSE_ITEM_UPDATE(CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).cItemName, 0, CLng(Site), CDbl(CurrentFlowModulePassFlag(idx_Module + glb_Module_Count).iValue), 0, False)
+            Next idx_Module
+            TheExec.Flow.TestLimit ResultVal:=OtherModulePassFlag, lowVal:=0, hiVal:=1, PinName:="Other_NoneAVS", ForceResults:=tlForceNone, TName:="FlowModulePassFlag"
+            TheExec.Flow.TestLimit ResultVal:=OtherModulePassFlag_LP, lowVal:=0, hiVal:=1, PinName:="Other_LP", ForceResults:=tlForceNone, TName:="FlowModulePassFlag"
+            TheExec.Flow.TestLimit ResultVal:=OtherModulePassFlag_HP, lowVal:=0, hiVal:=1, PinName:="Other_HP", ForceResults:=tlForceNone, TName:="FlowModulePassFlag"
+    
+            LocalDSPS_AVSLP_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_DSPSCluster, CurrentFlowModulePassFlag, False).Copy
+            LocalFFT_AVSLP_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_FFTCluster, CurrentFlowModulePassFlag, False).Copy
+            LocalSAMP_AVSLP_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_SAMPCluster, CurrentFlowModulePassFlag, False).Copy
+            LocalDSPS_AVSHP_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_DSPSCluster, CurrentFlowModulePassFlag, True).Copy
+            LocalFFT_AVSHP_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_FFTCluster, CurrentFlowModulePassFlag, True).Copy
+            LocalSAMP_AVSHP_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_SAMPCluster, CurrentFlowModulePassFlag, True).Copy
+            
+    
+    
+            DSP_AVSLP_ModuleFailCount_slng = LocalDSPS_AVSLP_Dspwave.CountElements(EqualTo, 0)
+            FFT_AVSLP_ModuleFailCount_slng = LocalFFT_AVSLP_Dspwave.CountElements(EqualTo, 0)
+            SAMP_AVSLP_ModuleFailCount_slng = LocalSAMP_AVSLP_Dspwave.CountElements(EqualTo, 0)
+            DSP_AVSHP_ModuleFailCount_slng = LocalDSPS_AVSHP_Dspwave.CountElements(EqualTo, 0)
+            FFT_AVSHP_ModuleFailCount_slng = LocalFFT_AVSHP_Dspwave.CountElements(EqualTo, 0)
+            SAMP_AVSHP_ModuleFailCount_slng = LocalSAMP_AVSHP_Dspwave.CountElements(EqualTo, 0)
+            
+          '''judge partial and set fail bin
+            If OtherModulePassFlag_LP = 1 And DSP_AVSLP_ModuleFailCount_slng = 0 And FFT_AVSLP_ModuleFailCount_slng = 0 And SAMP_AVSLP_ModuleFailCount_slng = 0 Then
+            ''' LP Full good
+                PG_Judge_Slng = 1
+                If glb_PG_DebugMode = True Then
+                    TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip is LP Full Good According to PG Pattern Result"
+                    TheExec.Datalog.WriteComment "Site:" & Site & "_PGFirstFail_SortNum is " & glb_PGFisrtFail_SortNum_SLng
+    
+                    If TheExec.Sites(Site).FirstSortNumber = -1 And TheExec.Sites(Site).FirstBinNumber = -1 Then
+                        TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has no other none PG tests failed."
+                    Else
+                        TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has some other none PG tests failed."
+                    End If
+                End If
+                
+            ElseIf OtherModulePassFlag_HP = 1 And DSP_AVSHP_ModuleFailCount_slng = 0 And FFT_AVSHP_ModuleFailCount_slng = 0 And SAMP_AVSHP_ModuleFailCount_slng = 0 Then
+            ''' HP Full good
+                PG_Judge_Slng = 1
+                If glb_PG_DebugMode = True Then
+                    TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip is HP Full Good According to PG Pattern Result"
+                    TheExec.Datalog.WriteComment "Site:" & Site & "_PGFirstFail_SortNum is " & glb_PGFisrtFail_SortNum_SLng
+        
+                    If TheExec.Sites(Site).FirstSortNumber = -1 And TheExec.Sites(Site).FirstBinNumber = -1 Then
+                        TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has no other none PG tests failed."
+                    Else
+                        TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has some other none PG tests failed."
+                    End If
+                End If
+                
+            ElseIf OtherModulePassFlag_LP = 1 And DSP_AVSLP_ModuleFailCount_slng <= 1 And FFT_AVSLP_ModuleFailCount_slng <= 1 And SAMP_AVSLP_ModuleFailCount_slng <= 1 Then
+            '''LP PG1
+                PG_Judge_Slng = 8
+                If glb_PG_DebugMode = True Then
+                    TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip is LP PG1 According to PG Pattern Result"
+                    TheExec.Datalog.WriteComment "Site:" & Site & "_PGFirstFail_SortNum is " & glb_PGFisrtFail_SortNum_SLng
+        
+                    If TheExec.Sites(Site).FirstSortNumber = -1 And TheExec.Sites(Site).FirstBinNumber = -1 Then
+                        TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has no other none PG tests failed."
+                    Else
+                        TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has some other none PG tests failed."
+                    End If
+                End If
+                
+            Else
+            ''''fail die
+                PG_Judge_Slng = 9
+                If glb_PG_DebugMode = True Then
+                    TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip is Fail Die According to PG Pattern Result"
+                    TheExec.Datalog.WriteComment "Site:" & Site & "_PGFirstFail_SortNum is " & glb_PGFisrtFail_SortNum_SLng
+                End If
+                
+                If TheExec.Sites(Site).FirstSortNumber = -1 And TheExec.Sites(Site).FirstBinNumber = -1 And _
+                    TheExec.Sites(Site).SortNumber = -1 And TheExec.Sites(Site).BinNumber = -1 Then
+                    If glb_PGFisrtFail_SortNum_SLng <> -9999 Then
+                        TheExec.Sites(Site).BinNumber = glb_PGFisrtFail_BinNum_SLng
+                        TheExec.Sites(Site).SortNumber = glb_PGFisrtFail_SortNum_SLng
+                        TheExec.Sites(Site).Result = tlResultFail
+                       
+                    Else
+                        'TheExec.Datalog.WriteComment "Site:" & Site & "_Warning!!!The  sort number is not supposed to be -9999here, there must be something wrong in the code!"
+                        errmsg = "Warning!!!The  sort number is not supposed to be -9999here, there must be something wrong in the code!"
+                        GoTo errHandler
+                    End If
+                End If
+                    
+            End If
+            
+            'Connect the OtherModulePassFlag_LP with "PWR_GRD_NOPG" EFUSE ITEM, so the last flow will get the other module LP pass fail information in AVS flow
+            If OtherModulePassFlag_LP = 0 Then
+                PWR_GRD_value = 2
+            End If
+           
+        Next Site
+    
+    
+    Else    '''Means Non AVS Flow
+        
+        
+        Call PG_UpdateNoneAVSModuleFlag(OtherModulePassFlag)
+        
+            '''Datalog all module flag and update them to efuse PGM
+        For Each Site In TheExec.Sites
+            
+            CurrentFlowPGPassFlag.iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(CurrentFlowPGPassFlag.cItemName, 0, Site)
+            TheExec.Flow.TestLimit ResultVal:=CurrentFlowPGPassFlag.iValue, lowVal:=0, hiVal:=1, PinName:=CurrentFlowPGPassFlag.cItemName, ForceResults:=tlForceNone, TName:="CurrentFlowPGPassFlag"
+            
+            For idx_Module = 0 To glb_Module_Count - 1
+                CurrentFlowModulePassFlagFromEfuse = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(CurrentFlowModulePassFlag(idx_Module).cItemName, 0, Site)
+                TheExec.Flow.TestLimit ResultVal:=CurrentFlowModulePassFlagFromEfuse, lowVal:=0, hiVal:=1, PinName:=CurrentFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="CurrentFlowModulePassFlagFromEfuse"
+                If CurrentFlowModulePassFlagFromEfuse = 1 And CurrentFlowModulePassFlag(idx_Module).iValue = 0 Then
+                    ModuleRetestBecomeFail = 1
+                    TheExec.Sites(Site).BinNumber = 6
+                    TheExec.Sites(Site).SortNumber = 6996
+                    TheExec.Sites(Site).Result = tlResultFail
+                Else
+                    ModuleRetestBecomeFail = 0
+                End If
+                TheExec.Flow.TestLimit ResultVal:=ModuleRetestBecomeFail, lowVal:=0, hiVal:=0, PinName:=CurrentFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="ModuleRetestBecomeFail"
+            Next idx_Module
+            
+            For idx_Module = 0 To glb_Module_Count - 1
+                TheExec.Flow.TestLimit ResultVal:=CurrentFlowModulePassFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=CurrentFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="FlowModulePassFlag"
+                If InStr(1, JobName, "FTZ") = 0 Then
+                Call HiEfuse.MULT_EFUSE_ITEM_UPDATE(CurrentFlowModulePassFlag(idx_Module).cItemName, 0, CLng(Site), CDbl(CurrentFlowModulePassFlag(idx_Module).iValue), 0, False)
+                End If
+            
+            Next idx_Module
+            TheExec.Flow.TestLimit ResultVal:=OtherModulePassFlag, lowVal:=0, hiVal:=1, PinName:="Other", ForceResults:=tlForceNone, TName:="FlowModulePassFlag"
+    
+        
+        
+            LocalDSPS_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_DSPSCluster, CurrentFlowModulePassFlag, False).Copy
+            LocalFFT_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_FFTCluster, CurrentFlowModulePassFlag, False).Copy
+            LocalSAMP_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_SAMPCluster, CurrentFlowModulePassFlag, False).Copy
+            
+        
+            DSP_ModuleFailCount_slng = LocalDSPS_Dspwave.CountElements(EqualTo, 0)
+            FFT_ModuleFailCount_slng = LocalFFT_Dspwave.CountElements(EqualTo, 0)
+            SAMP_ModuleFailCount_slng = LocalSAMP_Dspwave.CountElements(EqualTo, 0)
+                                
+                    If OtherModulePassFlag = 1 And DSP_ModuleFailCount_slng = 0 And FFT_ModuleFailCount_slng = 0 And SAMP_ModuleFailCount_slng = 0 Then
+                    '''Full good
+                        PG_Judge_Slng = 1
+                        If glb_PG_DebugMode = True Then
+                            TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip is Full Good According to PG Pattern Result"
+                            TheExec.Datalog.WriteComment "Site:" & Site & "_PGFirstFail_SortNum is " & glb_PGFisrtFail_SortNum_SLng
+                            
+                            If TheExec.Sites(Site).FirstSortNumber = -1 And TheExec.Sites(Site).FirstBinNumber = -1 Then
+                                TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has no other none PG tests failed."
+                            Else
+                                TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has some other none PG tests failed."
+                            End If
+                        End If
+                        
+                    ElseIf OtherModulePassFlag = 1 And DSP_ModuleFailCount_slng <= 1 And FFT_ModuleFailCount_slng <= 1 And SAMP_ModuleFailCount_slng <= 1 Then
+                    '''PG1
+                        PG_Judge_Slng = 8
+                        If glb_PG_DebugMode = True Then
+                            TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip is PG1 According to PG Pattern Result"
+                            TheExec.Datalog.WriteComment "Site:" & Site & "_PGFirstFail_SortNum is " & glb_PGFisrtFail_SortNum_SLng
+        
+                            If TheExec.Sites(Site).FirstSortNumber = -1 And TheExec.Sites(Site).FirstBinNumber = -1 Then
+                                TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has no other none PG tests failed."
+                            Else
+                                TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip has some other none PG tests failed."
+                            End If
+                        End If
+                        
+                    Else
+                    ''''fail die
+                        PG_Judge_Slng = 9
+                        If glb_PG_DebugMode = True Then
+                            TheExec.Datalog.WriteComment "Site:" & Site & "_This Chip is Fail Die According to PG Pattern Result"
+                            TheExec.Datalog.WriteComment "Site:" & Site & "_PGFirstFail_SortNum is " & glb_PGFisrtFail_SortNum_SLng
+                        End If
+                        
+                        If TheExec.Sites(Site).FirstSortNumber = -1 And TheExec.Sites(Site).FirstBinNumber = -1 And _
+                            TheExec.Sites(Site).SortNumber = -1 And TheExec.Sites(Site).BinNumber = -1 Then
+                            If glb_PGFisrtFail_SortNum_SLng <> -9999 Then
+                                TheExec.Sites(Site).BinNumber = glb_PGFisrtFail_BinNum_SLng
+                                TheExec.Sites(Site).SortNumber = glb_PGFisrtFail_SortNum_SLng
+                                TheExec.Sites(Site).Result = tlResultFail
+                               
+                            Else
+                                'TheExec.Datalog.WriteComment "Site:" & Site & "_Warning!!!The  sort number is not supposed to be -9999here, there must be something wrong in the code!"
+                                errmsg = "Warning!!!The  sort number is not supposed to be -9999here, there must be something wrong in the code!"
+                                GoTo errHandler
+                            End If
+                        End If
+                            
+                    End If
+        Next Site
+    End If
+    
+        TheExec.Flow.TestLimit ResultVal:=PG_Judge_Slng, PinName:="PG_GRD", ForceResults:=tlForceFlow, TName:="PG_GRD_PostJudge"
+        
+        
+        
+        
+        'Declaration For PostJudge in FT 25C flow
+        Dim Module_LastFlow_Flag() As Type_PartialGood_Flag  'record module result calc form FT_105C and FT_25C,include LP&HP result
+        Dim iPWR_GRD_NOPG As New SiteLong
+        
+        Dim LocalDSPS_AVSLP_LastFlow_Dspwave As New DSPWave
+        Dim LocalFFT_AVSLP_LastFlow_Dspwave As New DSPWave
+        Dim LocalSAMP_AVSLP_LastFlow_Dspwave As New DSPWave
+        Dim LocalDSPS_AVSHP_LastFlow_Dspwave As New DSPWave
+        Dim LocalFFT_AVSHP_LastFlow_Dspwave As New DSPWave
+        Dim LocalSAMP_AVSHP_LastFlow_Dspwave As New DSPWave
+        
+        
+    
+        Dim DSP_AVSLP_ModuleFailCount_LastFlow_slng As New SiteLong
+        Dim FFT_AVSLP_ModuleFailCount_LastFlow_slng As New SiteLong
+        Dim SAMP_AVSLP_ModuleFailCount_LastFlow_slng As New SiteLong
+        Dim DSP_AVSHP_ModuleFailCount_LastFlow_slng As New SiteLong
+        Dim FFT_AVSHP_ModuleFailCount_LastFlow_slng As New SiteLong
+        Dim SAMP_AVSHP_ModuleFailCount_LastFlow_slng As New SiteLong
+        
+        
+    '*************************************************************************************************
+    '*****FT 25C Only,AVS&Partial Grade Judge And Efuse Update ***************************************
+    '*************************************************************************************************
+
+        'only FT 25C flow run the follow process, used for AVS&partial grade judge
+        If InStr(1, JobName, "FTA") > 1 Then
+            If InStr(1, JobName, "_25C") > 1 Then
+                Dim ModuleList_Str() As String
+                ModuleList_Str = Split(USER_DEFINE_MODULENAME, "/")
+                ReDim Module_LastFlow_Flag(glb_Module_Count * 2 - 1)
+                
+                ''Construct flag name
+                For idx_Module = 0 To glb_Module_Count - 1
+                    Module_LastFlow_Flag(idx_Module).cItemName = ModuleList_Str(idx_Module) & "_LastFlow_Flag" & "_LP"
+                    Module_LastFlow_Flag(idx_Module + glb_Module_Count).cItemName = ModuleList_Str(idx_Module) & "_LastFlow_Flag" & "_HP"
+                Next idx_Module
+                
+                ''Set flag value
+                For Each Site In TheExec.Sites
+                    For idx_Module = 0 To glb_Module_Count - 1
+                        Module_LastFlow_Flag(idx_Module).iValue = PreCheckFlowModulePassFlag(idx_Module).iValue And CurrentFlowModulePassFlag(idx_Module).iValue
+                        Module_LastFlow_Flag(idx_Module + glb_Module_Count).iValue = PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).iValue And CurrentFlowModulePassFlag(idx_Module).iValue
+                        TheExec.Flow.TestLimit ResultVal:=Module_LastFlow_Flag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=Module_LastFlow_Flag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="Module_LastFlow_Flag"
+                        TheExec.Flow.TestLimit ResultVal:=Module_LastFlow_Flag(idx_Module + glb_Module_Count).iValue, lowVal:=0, hiVal:=1, PinName:=Module_LastFlow_Flag(idx_Module + glb_Module_Count).cItemName, ForceResults:=tlForceNone, TName:="Module_LastFlow_Flag"
+                    Next idx_Module
+                    
+                    iPWR_GRD_NOPG = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD("PWR_GRD_NOPG", 0, Site)
+    
+                    
+                ''calc fail elements
+                    LocalDSPS_AVSLP_LastFlow_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_DSPSCluster, Module_LastFlow_Flag, False).Copy
+                    LocalFFT_AVSLP_LastFlow_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_FFTCluster, Module_LastFlow_Flag, False).Copy
+                    LocalSAMP_AVSLP_LastFlow_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_SAMPCluster, Module_LastFlow_Flag, False).Copy
+                    LocalDSPS_AVSHP_LastFlow_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_DSPSCluster, Module_LastFlow_Flag, True).Copy
+                    LocalFFT_AVSHP_LastFlow_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_FFTCluster, Module_LastFlow_Flag, True).Copy
+                    LocalSAMP_AVSHP_LastFlow_Dspwave = PG_LocalDspWave_UpdateBy_UserDefineModule(USER_DEFINE_SAMPCluster, Module_LastFlow_Flag, True).Copy
+    
+    
+                    DSP_AVSLP_ModuleFailCount_LastFlow_slng = LocalDSPS_AVSLP_LastFlow_Dspwave.CountElements(EqualTo, 0)
+                    FFT_AVSLP_ModuleFailCount_LastFlow_slng = LocalFFT_AVSLP_LastFlow_Dspwave.CountElements(EqualTo, 0)
+                    SAMP_AVSLP_ModuleFailCount_LastFlow_slng = LocalSAMP_AVSLP_LastFlow_Dspwave.CountElements(EqualTo, 0)
+                    DSP_AVSHP_ModuleFailCount_LastFlow_slng = LocalDSPS_AVSHP_LastFlow_Dspwave.CountElements(EqualTo, 0)
+                    FFT_AVSHP_ModuleFailCount_LastFlow_slng = LocalFFT_AVSHP_LastFlow_Dspwave.CountElements(EqualTo, 0)
+                    SAMP_AVSHP_ModuleFailCount_LastFlow_slng = LocalSAMP_AVSHP_LastFlow_Dspwave.CountElements(EqualTo, 0)
+                
+                ''Partial Judge
+                    If iPWR_GRD_NOPG = 1 And DSP_AVSLP_ModuleFailCount_LastFlow_slng = 0 And FFT_AVSLP_ModuleFailCount_LastFlow_slng = 0 And SAMP_AVSLP_ModuleFailCount_LastFlow_slng = 0 Then
+                        ''LP Full Good
+                        glb_PG_GRD_Sdbl = 3
+                        glb_PWR_GRD_Sdbl = 1
+                    ElseIf DSP_AVSHP_ModuleFailCount_LastFlow_slng = 0 And FFT_AVSHP_ModuleFailCount_LastFlow_slng = 0 And SAMP_AVSHP_ModuleFailCount_LastFlow_slng = 0 Then
+                        ''HP Full Good
+                        glb_PG_GRD_Sdbl = 3
+                        glb_PWR_GRD_Sdbl = 2
+                    ElseIf iPWR_GRD_NOPG = 1 And DSP_AVSLP_ModuleFailCount_LastFlow_slng <= 1 And FFT_AVSLP_ModuleFailCount_LastFlow_slng <= 1 And SAMP_AVSLP_ModuleFailCount_LastFlow_slng <= 1 Then
+                        ''LP Partial Good
+                        glb_PG_GRD_Sdbl = 1
+                        glb_PWR_GRD_Sdbl = 3
+                    Else
+                        ''fail die, bin out here
+                        glb_PG_GRD_Sdbl = 0
+                        glb_PWR_GRD_Sdbl = 0
+                        TheExec.Sites(Site).BinNumber = 6
+                        TheExec.Sites(Site).SortNumber = 6998
+                        TheExec.Sites(Site).Result = tlResultFail
+                    End If
+                    
+                    Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("PG_GRD", 0, CLng(Site), glb_PG_GRD_Sdbl(Site), 0, False)
+                    Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("PWR_GRD", 0, CLng(Site), glb_PWR_GRD_Sdbl(Site), 0, False)
+                    
+                    
+                    If glb_PWR_GRD_Sdbl = 1 Or glb_PWR_GRD_Sdbl = 3 Then
+                        ''''In LP case, update the first harf of Module_LastFlow_Flag,which means LP Result calc from all flow
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("DSPS0_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(0).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("DSPS1_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(1).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("DSPS2_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(2).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("DSPS3_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(3).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("FFT0_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(4).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("FFT1_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(5).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("SAMPLE0_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(6).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("SAMPLE1_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(7).iValue), 0, False)
+                    ElseIf glb_PWR_GRD_Sdbl = 2 Then
+                        ''''In HP case, update the last harf of Module_LastFlow_Flag,which means HP Result calc from all flow
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("DSPS0_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(8).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("DSPS1_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(9).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("DSPS2_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(10).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("DSPS3_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(11).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("FFT0_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(12).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("FFT1_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(13).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("SAMPLE0_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(14).iValue), 0, False)
+                        Call HiEfuse.MULT_EFUSE_ITEM_UPDATE("SAMPLE1_PAGD_PASS_FLAG", 0, CLng(Site), CDbl(Module_LastFlow_Flag(15).iValue), 0, False)
+                    End If
+                    
+                Next Site
+            End If
+        End If
+
+Exit Function
+errHandler:
+    TheExec.ErrorLogMessage ("*E* PG.PostJudge: " + errmsg)
+    If AbortTest Then Exit Function Else Resume Next
+End Function
