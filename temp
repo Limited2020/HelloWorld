@@ -1,0 +1,177 @@
+Attribute VB_Name = "VBT_basic_PartialGood_XXXX"
+Option Explicit
+
+''=====================================
+''   Partial Good Flag Sturcture Definition
+''=====================================
+
+Public Type Type_PartialGood_Flag
+    cItemName As String
+    iValue As New SiteLong
+End Type
+
+Public CurrentFlowPGPassFlag As Type_PartialGood_Flag
+Public PreCheckFlowPGPassFlag As Type_PartialGood_Flag
+Public CurrentFlowModulePassFlag() As Type_PartialGood_Flag
+Public PreCheckFlowModulePassFlag() As Type_PartialGood_Flag
+Public FlowModuleFlag() As Type_PartialGood_Flag
+
+
+''=====================================
+''   Partial Good Sturcture Definition
+''=====================================
+
+Type PG_Info_Structure
+    WGL_Name() As String
+    PG_Type() As String
+    IncludeModule() As String
+    Pin_Cycle_Array() As String
+End Type
+
+Global PG_Info  As PG_Info_Structure
+
+'Use Dictionary to quickly find pattern index, key is wgl name in PG_Info work sheet, item is index
+Global FindPatternIndex_Dct As New Dictionary
+
+'Use Dictionary to quickly find module index, key is module name defined in global const string, item is index
+Global FindModuleIndex_Dct As New Dictionary
+
+'User can modify PG module name in this string, PG result for each module is stored in DSPwave reference to the order in this string
+Global Const USER_DEFINE_MODULENAME As String = "DSP0/DSP1/DSP2/DSP3/FFT0/FFT1/SAMP0/SAMP1"
+'User define these string const accroding to the PG Rules,it should be included in USER_DEFINE_MODULENAME,used for PG bining
+Global Const USER_DEFINE_DSPSCluster As String = "DSP0/DSP1/DSP2/DSP3"
+Global Const USER_DEFINE_FFTCluster As String = "FFT0/FFT1"
+Global Const USER_DEFINE_SAMPCluster As String = "SAMP0/SAMP1"
+
+
+Global glb_PG_FlowResult_Dspwave As New DSPWave
+Global glb_PG_FlowResult_AVS_Dspwave As New DSPWave
+Global glb_Module_Count As Long
+Global glb_PG_DebugMode As Boolean
+Global glb_PGFirstFail_Flag_SBool As New SiteBoolean      'Init False, record if the first fail is found, if found then glb_PGFirstFail_Flag_SBool=True
+Global glb_PGFirstFail_UpdateDone_SBool As New SiteBoolean
+Global glb_PGFisrtFail_BinNum_SLng As New SiteLong       'Record the first found BinNum
+Global glb_PGFisrtFail_SortNum_SLng As New SiteLong      'Record the first found SortNum
+Public PG_Judge_Slng As New SiteLong   '''Used In postJudge for datalog print
+Global glb_IsPGInfoLoaded_Bool As Boolean
+
+'''the value assignment of next two global elment is not fix,because AVS process hasn't fix,it's temp for engineer program  20200316 Sean
+Global glb_PG_GRD_Sdbl As New SiteDouble
+Global glb_PWR_GRD_Sdbl As New SiteDouble
+Public PGCaredModule_Result_SBool As New SiteBoolean
+Public AVS_Enable As Boolean                    ''set true in AVS test,stands for whether is AVS test
+Public AVS_LP_Enable_SBool As New SiteBoolean   ''set true in AVS LP process
+Public AVS_HP_Enable_SBool As New SiteBoolean   ''set true in AVS HP process
+Public H_PWR_FLag_PG As New SiteBoolean
+Public glb_BinOut_Enable As New SiteBoolean     ''set true when need to bin out, haven't been used yet
+
+'''Dec For DVS bin 5 requirement,temp
+Public glb_ModuleFailCount_BeforeDVS_slng As New SiteLong                   'Used to count the total number of failed modules before DVS
+Public glb_ModuleFailCount_AfterDVS_slng As New SiteLong                    'Used to count the total number of failed modules after DVS
+Public glb_UpdateBinNumerAfterDVSDone_sbool As New SiteBoolean              'Used to mark the action of updating binnumber after DVS
+'Public glb_DFTRetestAfterDVS_sbool As New SiteBoolean                       'Used to mark the start and end of DFT test after DVS
+Public glb_PG_DVSFirstFail_Flag_SBool As New SiteBoolean                    'Init False, record if the first fail Module of PostDVS is found, if found then glb_PG_DVSFirstFail_Flag_SBool=True
+Public glb_PG_DVS_FisrtFail_BinNum_SLng As New SiteLong       'Record the first found BinNum in PostDVS
+Public glb_PG_DVS_FisrtFail_SortNum_SLng As New SiteLong      'Record the first found SortNum in PostDVS
+
+
+'''''''For DVS FLOW Only
+Public Function PG_CalcModuleFailCountBeforeDVS_vbt() As Long
+
+    On Error GoTo errHandler
+'''''''''''''''''''
+'Executed as a test item after DVS only in CPB_L40C flow,used to count the total number of failed modules for each pattern before DVS
+'Test item execution condition is controlled by Flow Flag,which is DVS_FALG_ZORE=True
+
+    Dim Site As Variant
+    Dim tempPG_Dspwave_beforeDVS As New DSPWave
+    Dim idx_Module As Long
+    Dim i As Long
+    Dim tempLocalDspwave As New DSPWave
+    
+    glb_ModuleFailCount_BeforeDVS_slng = 0
+    
+    
+    For Each Site In TheExec.Sites
+        tempPG_Dspwave_beforeDVS = glb_PG_FlowResult_Dspwave.Copy
+        tempPG_Dspwave_beforeDVS = tempPG_Dspwave_beforeDVS.Select(glb_Module_Count + 2, 1, -1)           ''remove the inital dummy element
+        For idx_Module = 0 To glb_Module_Count - 1
+            tempLocalDspwave = tempPG_Dspwave_beforeDVS.Select(idx_Module, glb_Module_Count + 2, -1)
+            glb_ModuleFailCount_BeforeDVS_slng = glb_ModuleFailCount_BeforeDVS_slng + tempLocalDspwave.CountElements(EqualTo, 0)
+        Next idx_Module
+        
+        'glb_DFTRetestAfterDVS_sbool = True
+        'the next part will be the DFT retest after DVS,and begin to record bin5,so set glb_DFTRetestAfterDVS_sbool to true
+    Next Site
+
+    Exit Function
+errHandler:
+    If AbortTest Then Exit Function Else Resume Next
+End Function
+
+
+'''''''For DVS FLOW Only
+Public Function PG_CalcModuleFailCountAfterDVS(inLocalDspwave As DSPWave, inSortNumber_lng As Long) As Long
+
+
+'''this function should be added at the end of every post pattern function, but it has three execution conditions
+'''condition1: current flow should be DVS Flow
+'''condition2: DVS_FALG_ZORE=True ,means DVS fresh
+'''condition3: Testnumber should start with 5, indicating hardbin 5
+'''condition4: glb_UpdateBinNumerAfterDVSDone_sbool=false
+
+''glb_ModuleFailCount_AfterDVS_slng will be updated after every PG test
+''When glb_ModuleFailCount_AfterDVS_slng is larger than glb_ModuleFailCount_BeforeDVS_slng,means some module is failed because of DVS,than bin number will be updated and locked
+
+    On Error GoTo errHandler
+    
+    Dim Site As Variant
+    Dim JobName As String
+    
+    Dim tempPG_Dspwave_AfterDVS As New DSPWave
+    Dim tempLocalDspwave As New DSPWave
+    Dim postpatDspwave As New DSPWave
+    Dim idx_Module As Long
+    Dim i As Long
+    
+    
+    JobName = TheExec.CurrentJob
+    If InStr(1, JobName, "CPB") > 1 And InStr(1, JobName, "_L40C") > 1 Then
+        For Each Site In TheExec.Sites
+            If Floor(inSortNumber_lng / 1000) = 5 And glb_UpdateBinNumerAfterDVSDone_sbool = False Then
+                If TheExec.Sites(Site).FlagState("DVS_FALG_ZORE") = logicTrue Then
+                    
+                    'lock the first sort bin number in postDVS
+                    If glb_PG_DVSFirstFail_Flag_SBool = False Then
+                        postpatDspwave = inLocalDspwave.Copy
+                        postpatDspwave = postpatDspwave.Select(0, 1, glb_Module_Count + 1)
+                        If postpatDspwave.CountElements(EqualTo, 0) > 0 Then   ''means more than one module failed
+                            glb_PG_DVSFirstFail_Flag_SBool = True
+                            glb_PG_DVS_FisrtFail_SortNum_SLng = inSortNumber_lng
+                            glb_PG_DVS_FisrtFail_BinNum_SLng = Floor(inSortNumber_lng / 1000)
+                        End If
+                    End If
+                        
+                     tempPG_Dspwave_AfterDVS = inLocalDspwave.Copy
+                    tempPG_Dspwave_AfterDVS = tempPG_Dspwave_AfterDVS.Select(0, 1, glb_Module_Count)
+                    
+
+                    glb_ModuleFailCount_AfterDVS_slng = glb_ModuleFailCount_AfterDVS_slng + tempPG_Dspwave_AfterDVS.CountElements(EqualTo, 0)
+
+                    'when the PG module fail count increased in postDVS larger than FailCount_BeforeDVS, means there must be some module failed because of DVS, then bin the first fail in postDVS
+                    If glb_ModuleFailCount_AfterDVS_slng > glb_ModuleFailCount_BeforeDVS_slng Then
+                        glb_PGFisrtFail_BinNum_SLng = glb_PG_DVS_FisrtFail_BinNum_SLng
+                        glb_PGFisrtFail_SortNum_SLng = glb_PG_DVS_FisrtFail_SortNum_SLng
+                        glb_UpdateBinNumerAfterDVSDone_sbool = True
+                    End If
+                Else
+                    Err.Raise " DVS Logic Error: When Hard Bin5, DVS_FALG_ZORE should be True! "
+                End If
+            End If
+        Next Site
+    End If
+    
+    Exit Function
+errHandler:
+    If AbortTest Then Exit Function Else Resume Next
+End Function
