@@ -175,3 +175,219 @@ Public Function PG_CalcModuleFailCountAfterDVS(inLocalDspwave As DSPWave, inSort
 errHandler:
     If AbortTest Then Exit Function Else Resume Next
 End Function
+
+''''''''''For DVS FLOW Only
+'''Public Function PG_DFTRetestAfterDVS_Done()
+''''This function will be executed after bin5 tests are finished
+'''Dim site As Variant
+'''For Each site In TheExec.Sites
+'''    glb_DFTRetestAfterDVS_sbool = False
+'''Next site
+'''End Function
+
+Public Function PG_PreJudge(PatName As Pattern, _
+                            Optional FlowTempFlag As String = "RT|HT|LT", _
+                            Optional FlowFuncFlag As String = "FT|CP", _
+                            Optional FlowFuncPart As String = "NA|A|B|C|D|E|Z", _
+                            Optional FlowIsAVS As Boolean = False, _
+                            Optional PreCheck_FlowTempFlag As String = "RT|HT|LT|NA", _
+                            Optional PreCheck_FlowFuncFlag As String = "FT|CP|QA|OR|NA", _
+                            Optional PreCheck_FlowFuncPart As String = "NA|A|B|C|D|E|Z", _
+                            Optional PreCheck_FlowIsAVS As Boolean = False, _
+                            Optional CheckPG As PFType, _
+                            Optional ConnectAllPins As Boolean = True, _
+                            Optional LoadLevels As Boolean = True, _
+                            Optional LoadTiming As Boolean = True, _
+                            Optional RelayMode As tlRelayMode = 1, _
+                            Optional InitWaitTime As Double = 0, _
+                            Optional Exec_Mode As Exec_Modes, _
+                            Optional DriveLoPins As PinList, Optional DriveHiPins As PinList, Optional DriveZPins As PinList, _
+                            Optional FloatPins As PinList, _
+                            Optional util1Pins As PinList, Optional util0Pins As PinList) As Long
+
+
+    On Error GoTo errHandler
+    
+    If glb_IsPGInfoLoaded_Bool = False Then
+        Call Initialize_PG_Info
+    End If
+
+    Dim Idx As Long
+    Dim idx_Module As Long
+    
+    Dim Site As Variant
+    
+'*************************************************************************************************
+'*****Step1:Value inital for Global Variables*****************************************************
+'*************************************************************************************************
+    For Each Site In TheExec.Sites
+        glb_PG_GRD_Sdbl = 0
+        glb_PWR_GRD_Sdbl = 0
+        glb_PGFirstFail_Flag_SBool = False
+        glb_PGFirstFail_UpdateDone_SBool = False
+        glb_BinOut_Enable = False
+        glb_PGFisrtFail_BinNum_SLng = -9999
+        glb_PGFisrtFail_SortNum_SLng = -9999
+        glb_UpdateBinNumerAfterDVSDone_sbool = False
+        'glb_DFTRetestAfterDVS_sbool = False
+        glb_ModuleFailCount_BeforeDVS_slng = 0
+        glb_ModuleFailCount_AfterDVS_slng = 0
+        glb_PG_DVSFirstFail_Flag_SBool = False
+        glb_PG_DVS_FisrtFail_BinNum_SLng = -9999
+        glb_PG_DVS_FisrtFail_SortNum_SLng = -9999
+        AVS_Enable = False
+        PG_Judge_Slng = 0
+    Next Site
+    
+    
+'*************************************************************************************************
+'*****Step2:Construct Current\PreCheck Flow PG Efuse Pass Flag Item Name *************************
+'*************************************************************************************************
+    CurrentFlowPGPassFlag.cItemName = "PG_PASS_FLAG_" & FlowTempFlag
+     
+    If FlowFuncPart = "NA" Then
+        CurrentFlowPGPassFlag.cItemName = CurrentFlowPGPassFlag.cItemName & "_" & FlowFuncFlag
+    Else
+        CurrentFlowPGPassFlag.cItemName = CurrentFlowPGPassFlag.cItemName & "_" & FlowFuncFlag & FlowFuncPart
+    End If
+    
+    If PreCheck_FlowTempFlag = "NA" And PreCheck_FlowFuncFlag = "NA" And PreCheck_FlowFuncPart = "NA" Then
+        
+        If glb_PG_DebugMode = True Then
+            TheExec.Datalog.WriteComment " No Precheck Flow,PreCheckFlowPG Pass Flag doesn't exist"
+        End If
+    Else
+        PreCheckFlowPGPassFlag.cItemName = "PG_PASS_FLAG_" & PreCheck_FlowTempFlag
+
+        If PreCheck_FlowFuncPart = "NA" Then
+            PreCheckFlowPGPassFlag.cItemName = PreCheckFlowPGPassFlag.cItemName & "_" & PreCheck_FlowFuncFlag
+        Else
+            PreCheckFlowPGPassFlag.cItemName = PreCheckFlowPGPassFlag.cItemName & "_" & PreCheck_FlowFuncFlag & PreCheck_FlowFuncPart
+        End If
+    End If
+    
+    
+    Dim ModuleList_Str() As String
+    ModuleList_Str = Split(USER_DEFINE_MODULENAME, "/")
+    ReDim FlowModuleFlag(glb_Module_Count - 1)
+    
+'*************************************************************************************************
+'*****Step2:Construct Current\PreCheck Flow Module Efuse Pass Flag Item Name *********************
+'*************************************************************************************************
+    If FlowIsAVS = True Then     ''means current flow is AVS flow, need two groups of Pass Flag(LP\HP)
+        ReDim CurrentFlowModulePassFlag(glb_Module_Count * 2 - 1)
+        For Idx = 0 To glb_Module_Count - 1
+            CurrentFlowModulePassFlag(Idx).cItemName = ModuleList_Str(Idx) & "_" & MID(CurrentFlowPGPassFlag.cItemName, 4) & "_LP"
+            TheExec.Flow.TestLimit ResultVal:=0, lowVal:=0, hiVal:=1, PinName:=CurrentFlowModulePassFlag(Idx).cItemName, ForceResults:=tlForceNone, TName:="CurrentFlowModulePassFlag"
+            CurrentFlowModulePassFlag(Idx + glb_Module_Count).cItemName = ModuleList_Str(Idx) & "_" & MID(CurrentFlowPGPassFlag.cItemName, 4) & "_HP"
+            TheExec.Flow.TestLimit ResultVal:=0, lowVal:=0, hiVal:=1, PinName:=CurrentFlowModulePassFlag(Idx + glb_Module_Count).cItemName, ForceResults:=tlForceNone, TName:="CurrentFlowModulePassFlag"
+        Next Idx
+    Else                        ''means current flow is None AVS flow, need one group of Pass Flag
+       ReDim CurrentFlowModulePassFlag(glb_Module_Count - 1)
+       For Idx = 0 To glb_Module_Count - 1
+            CurrentFlowModulePassFlag(Idx).cItemName = ModuleList_Str(Idx) & "_" & MID(CurrentFlowPGPassFlag.cItemName, 4)
+            TheExec.Flow.TestLimit ResultVal:=0, lowVal:=0, hiVal:=1, PinName:=CurrentFlowModulePassFlag(Idx).cItemName, ForceResults:=tlForceNone, TName:="CurrentFlowModulePassFlag"
+        Next Idx
+    End If
+    
+    
+    If PreCheck_FlowTempFlag = "NA" And PreCheck_FlowFuncFlag = "NA" And PreCheck_FlowFuncPart = "NA" Then
+        
+        If glb_PG_DebugMode = True Then
+            TheExec.Datalog.WriteComment " No Precheck Flow,PreCheckFlow Module Pass Flag doesn't exist"
+        End If
+    Else
+        If PreCheck_FlowIsAVS = True Then  ''means precheck flow is AVS flow, need two groups of Pass Flag(LP\HP)
+            ReDim PreCheckFlowModulePassFlag(glb_Module_Count * 2 - 1)
+            For Idx = 0 To glb_Module_Count - 1
+                PreCheckFlowModulePassFlag(Idx).cItemName = ModuleList_Str(Idx) & "_" & MID(PreCheckFlowPGPassFlag.cItemName, 4) & "_LP"
+                PreCheckFlowModulePassFlag(Idx + glb_Module_Count).cItemName = ModuleList_Str(Idx) & "_" & MID(PreCheckFlowPGPassFlag.cItemName, 4) & "_HP"
+            Next Idx
+        Else                                ''means current flow is None AVS flow, need one group of Pass Flag
+            ReDim PreCheckFlowModulePassFlag(glb_Module_Count - 1)
+            For Idx = 0 To glb_Module_Count - 1
+                PreCheckFlowModulePassFlag(Idx).cItemName = ModuleList_Str(Idx) & "_" & MID(PreCheckFlowPGPassFlag.cItemName, 4)
+            Next Idx
+        End If
+    End If
+    
+    ''Construct Flow Module Flag Name
+    For Idx = 0 To glb_Module_Count - 1
+       FlowModuleFlag(Idx).cItemName = ModuleList_Str(Idx) & "_Flow_Flag"
+    Next Idx
+    
+    
+'*************************************************************************************************
+'*****Step3:Set Flow Module Flag Value accroding to PreCheck Flow Result**************************
+'*************************************************************************************************
+
+    If PreCheck_FlowTempFlag = "NA" And PreCheck_FlowFuncFlag = "NA" And PreCheck_FlowFuncPart = "NA" Then
+        
+        '''if no precheck flow, set all FlowModule flag=1
+        For idx_Module = 0 To glb_Module_Count - 1
+            FlowModuleFlag(idx_Module).iValue = 1
+            TheExec.Flow.TestLimit ResultVal:=FlowModuleFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=FlowModuleFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="FlowModuleFlag"
+        Next idx_Module
+     
+    ElseIf PreCheck_FlowIsAVS = True Then
+        '''if precheck flow is AVS Flow, Flow Module Flag value should be the or result of AVS_LP and AVS_HP result
+            For Each Site In TheExec.Sites
+        
+                PreCheckFlowPGPassFlag.iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(PreCheckFlowPGPassFlag.cItemName, 0, Site)
+                TheExec.Flow.TestLimit ResultVal:=PreCheckFlowPGPassFlag.iValue, lowVal:=1, hiVal:=1, PinName:=PreCheckFlowPGPassFlag.cItemName, ForceResults:=tlForceNone, TName:="PreCheckFlowPGPassFlag"
+                If PreCheckFlowPGPassFlag.iValue = 0 Then
+                    For idx_Module = 0 To glb_Module_Count - 1
+                        PreCheckFlowModulePassFlag(idx_Module).iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(PreCheckFlowModulePassFlag(idx_Module).cItemName, 0, Site)
+                        TheExec.Flow.TestLimit ResultVal:=PreCheckFlowModulePassFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=PreCheckFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="PreCheckFlowModulePassFlag"
+                        PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).cItemName, 0, Site)
+                        TheExec.Flow.TestLimit ResultVal:=PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).iValue, lowVal:=0, hiVal:=1, PinName:=PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).cItemName, ForceResults:=tlForceNone, TName:="PreCheckFlowModulePassFlag"
+                        FlowModuleFlag(idx_Module).iValue = 1
+                        TheExec.Flow.TestLimit ResultVal:=FlowModuleFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=FlowModuleFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="FlowModuleFlag"
+                    Next idx_Module
+                Else
+                    For idx_Module = 0 To glb_Module_Count - 1
+                        PreCheckFlowModulePassFlag(idx_Module).iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(PreCheckFlowModulePassFlag(idx_Module).cItemName, 0, Site)
+                        TheExec.Flow.TestLimit ResultVal:=PreCheckFlowModulePassFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=PreCheckFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="PreCheckFlowModulePassFlag"
+                        PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).cItemName, 0, Site)
+                        TheExec.Flow.TestLimit ResultVal:=PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).iValue, lowVal:=0, hiVal:=1, PinName:=PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).cItemName, ForceResults:=tlForceNone, TName:="PreCheckFlowModulePassFlag"
+                        FlowModuleFlag(idx_Module).iValue = PreCheckFlowModulePassFlag(idx_Module).iValue Or PreCheckFlowModulePassFlag(idx_Module + glb_Module_Count).iValue
+                        TheExec.Flow.TestLimit ResultVal:=FlowModuleFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=FlowModuleFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="FlowModuleFlag"
+                    Next idx_Module
+                End If
+            Next Site
+    Else
+        '''if precheck flow is None AVS Flow, Flow Module Flag value should be the or result of precheck flow result
+        For Each Site In TheExec.Sites
+        
+            PreCheckFlowPGPassFlag.iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(PreCheckFlowPGPassFlag.cItemName, 0, Site)
+            TheExec.Flow.TestLimit ResultVal:=PreCheckFlowPGPassFlag.iValue, lowVal:=1, hiVal:=1, PinName:=PreCheckFlowPGPassFlag.cItemName, ForceResults:=tlForceNone, TName:="PreCheckFlowPGPassFlag"
+            If PreCheckFlowPGPassFlag.iValue = 0 Then
+                For idx_Module = 0 To glb_Module_Count - 1
+                    PreCheckFlowModulePassFlag(idx_Module).iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(PreCheckFlowModulePassFlag(idx_Module).cItemName, 0, Site)
+                    TheExec.Flow.TestLimit ResultVal:=PreCheckFlowModulePassFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=PreCheckFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="PreCheckFlowModulePassFlag"
+                    FlowModuleFlag(idx_Module).iValue = 1
+                    TheExec.Flow.TestLimit ResultVal:=FlowModuleFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=FlowModuleFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="FlowModuleFlag"
+                Next idx_Module
+            Else
+                For idx_Module = 0 To glb_Module_Count - 1
+                    PreCheckFlowModulePassFlag(idx_Module).iValue = HiEfuse.GET_MULT_EFUSE_ITEM_CODE_RD(PreCheckFlowModulePassFlag(idx_Module).cItemName, 0, Site)
+                    TheExec.Flow.TestLimit ResultVal:=PreCheckFlowModulePassFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=PreCheckFlowModulePassFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="PreCheckFlowModulePassFlag"
+                    FlowModuleFlag(idx_Module).iValue = PreCheckFlowModulePassFlag(idx_Module).iValue
+                    TheExec.Flow.TestLimit ResultVal:=FlowModuleFlag(idx_Module).iValue, lowVal:=0, hiVal:=1, PinName:=FlowModuleFlag(idx_Module).cItemName, ForceResults:=tlForceNone, TName:="FlowModuleFlag"
+                Next idx_Module
+            End If
+        Next Site
+    End If
+    
+    '''create dummy space,size=glb_Module_Count+2,because there is one element for other moudle and one element for TestNum
+    Set glb_PG_FlowResult_Dspwave = New DSPWave
+    Set glb_PG_FlowResult_AVS_Dspwave = New DSPWave
+    glb_PG_FlowResult_Dspwave.CreateConstant -1, glb_Module_Count + 2, DspLong
+    glb_PG_FlowResult_AVS_Dspwave.CreateConstant -1, (glb_Module_Count + 2) * 2, DspLong
+    
+
+    Exit Function
+errHandler:
+    If AbortTest Then Exit Function Else Resume Next
+
+End Function
